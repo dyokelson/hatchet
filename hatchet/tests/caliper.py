@@ -794,3 +794,29 @@ def test_sw4_cuda_summary_from_caliperreader(
     assert type(gf.metadata["mpi.world.size"]) == int
     assert type(gf.metadata["cali.caliper.version"]) == str
     assert type(gf.metadata["cali.channel"]) == str
+
+
+def test_graphframe_timeseries_lulesh_from_file(caliper_timeseries_cali):
+    """Sanity check the timeseries Caliper reader by examining a known input."""
+
+    gf = GraphFrame.from_caliperreader(str(caliper_timeseries_cali))
+
+    assert len(gf.dataframe.groupby("name")) == 4
+    assert "cali.caliper.version" in gf.metadata.keys()
+    print(gf.dataframe.columns)
+
+    for col in gf.dataframe.columns:
+        if col in ("time (inc)", "time"):
+            assert gf.dataframe[col].dtype == np.float64
+        elif col in ("nid", "rank"):
+            assert gf.dataframe[col].dtype == pd.Int64Dtype()
+        elif col in ("name", "node"):
+            assert gf.dataframe[col].dtype == object
+
+    assert type(gf.metadata["cali.channel"]) == str
+    assert type(gf.metadata["cali.caliper.version"]) == str
+
+    # check for the expected timeseries columns
+    timeseries_cols = ["timeseries.starttime", "timeseries.duration", "loop.start_iteration", "loop.iterations"]
+    for tcol in timeseries_cols:
+        assert tcol in gf.dataframe.columns
