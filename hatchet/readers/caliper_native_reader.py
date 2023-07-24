@@ -106,7 +106,7 @@ class CaliperNativeReader:
                                 self.filename_or_caliperreader.attribute(
                                     item
                                 ).attribute_type()
-                                == "int"
+                                in ["int", "uint"] # do we want uints? 
                             ):
                                 node_dict[item] = int(record[item])
                                 if item not in self.record_data_cols:
@@ -121,7 +121,8 @@ class CaliperNativeReader:
                                     node_dict[item] = record[item]
                                     if item not in self.record_data_cols:
                                         self.record_data_cols.append(item)
-
+                            # else:
+                                # TODO: do we want to add any error handling here if we get an unsupported type?
                     all_metrics.append(node_dict)
 
         # make list of metric columns

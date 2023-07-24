@@ -801,9 +801,10 @@ def test_graphframe_timeseries_lulesh_from_file(caliper_timeseries_cali):
 
     gf = GraphFrame.from_caliperreader(str(caliper_timeseries_cali))
 
-    assert len(gf.dataframe.groupby("name")) == 4
+    assert len(gf.dataframe.groupby("name")) == 19
     assert "cali.caliper.version" in gf.metadata.keys()
     print(gf.dataframe.columns)
+    #print(gf.dataframe.head())
 
     for col in gf.dataframe.columns:
         if col in ("time (inc)", "time"):
@@ -817,6 +818,6 @@ def test_graphframe_timeseries_lulesh_from_file(caliper_timeseries_cali):
     assert type(gf.metadata["cali.caliper.version"]) == str
 
     # check for the expected timeseries columns
-    timeseries_cols = ["timeseries.starttime", "timeseries.duration", "loop.start_iteration", "loop.iterations"]
+    timeseries_cols = ["timeseries.starttime", "timeseries.duration", "loop.start_iteration", "loop.iterations", "memory"]
     for tcol in timeseries_cols:
         assert tcol in gf.dataframe.columns
