@@ -484,9 +484,9 @@ class CaliperNativeReader:
             metadata=parsed_metadata,
         )
 
-    def read_timeseries():
+    def read_timeseries(self):
         gf_list = []
         # will need to split this up in the read method
-	gf_list.append(self.read())        
+        gf_list.append(self.read())        
         return gf_list
     
