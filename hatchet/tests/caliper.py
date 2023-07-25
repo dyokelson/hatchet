@@ -799,12 +799,14 @@ def test_sw4_cuda_summary_from_caliperreader(
 def test_graphframe_timeseries_lulesh_from_file(caliper_timeseries_cali):
     """Sanity check the timeseries Caliper reader by examining a known input."""
 
-    gf = GraphFrame.from_caliperreader(str(caliper_timeseries_cali))
+    gf_list = GraphFrame.from_timeseries(str(caliper_timeseries_cali))
+    
+    assert(type(gf_list)) == list
+    gf = gf_list[0]
 
     assert len(gf.dataframe.groupby("name")) == 19
     assert "cali.caliper.version" in gf.metadata.keys()
     print(gf.dataframe.columns)
-    #print(gf.dataframe.head())
 
     for col in gf.dataframe.columns:
         if col in ("time (inc)", "time"):
