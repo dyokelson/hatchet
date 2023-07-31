@@ -43,6 +43,8 @@ class CaliperNativeReader:
         self.callpath_to_idx = {}
         self.global_nid = 0
         self.node_ordering = False
+	self.gf_list = None # only initialize to an empty list in the read_timeseries intercept function
+        self.timeseries_level = None
 
         self.default_metric = None
 
@@ -55,6 +57,8 @@ class CaliperNativeReader:
             self.string_attributes = [self.string_attributes]
 
     def read_metrics(self, ctx="path"):
+
+    """ TODO: append each metrics table to a list and return the list, split on timeseries_level if exists """
         all_metrics = []
         records = self.filename_or_caliperreader.records
 
@@ -342,139 +346,156 @@ class CaliperNativeReader:
         if self.node_ordering:
             graph.node_ordering = True
         graph.enumerate_traverse()
-
-        with self.timer.phase("read metrics"):
-            df_fixed_data = self.read_metrics()
-
-        metrics = pd.DataFrame.from_dict(data=df_fixed_data)
-
-        # add missing intermediate nodes to the df_fixed_data dataframe
-        if "mpi.rank" in df_fixed_data.columns:
-            num_ranks = metrics["mpi.rank"].max() + 1
-            rank_list = range(0, num_ranks)
-
-        # create a standard dict to be used for filling all missing rows
-        default_metric_dict = {}
-        for idx, col in enumerate(self.record_data_cols):
-            if self.filename_or_caliperreader.attribute(col).is_value():
-                default_metric_dict[list(self.record_data_cols)[idx]] = 0
-            else:
-                default_metric_dict[list(self.record_data_cols)[idx]] = None
-        default_metric_dict["nid"] = np.nan
-
-        # create a list of dicts, one dict for each missing row
-        missing_nodes = []
-        for iteridx, row in self.df_nodes.iterrows():
-            # check if df_nodes row exists in df_fixed_data
-            metric_rows = df_fixed_data.loc[metrics["nid"] == row["nid"]]
-            if "mpi.rank" not in self.metric_cols:
-                if metric_rows.empty:
-                    # add a single row
-                    node_dict = dict(default_metric_dict)
-                    missing_nodes.append(node_dict)
-            else:
-                if metric_rows.empty:
-                    # add a row per MPI rank
-                    for rank in rank_list:
-                        node_dict = dict(default_metric_dict)
-                        node_dict["nid"] = row["nid"]
-                        node_dict["mpi.rank"] = rank
-                        missing_nodes.append(node_dict)
-                elif len(metric_rows) < num_ranks:
-                    # add a row for each missing MPI rank
-                    present_ranks = metric_rows["mpi.rank"].values
-                    missing_ranks = [x for x in rank_list if x not in present_ranks]
-                    for rank in missing_ranks:
-                        node_dict = dict(default_metric_dict)
-                        node_dict["nid"] = row["nid"]
-                        node_dict["mpi.rank"] = rank
-                        missing_nodes.append(node_dict)
-
-        df_missing = pd.DataFrame.from_dict(data=missing_nodes)
-        df_metrics = pd.concat([df_fixed_data, df_missing], sort=False)
-
-        # rename columns to user-readable metric names (i.e., aliases)
-        if not self.use_native_metric_names:
-            for col in df_metrics.columns:
-                if col == "nid":
-                    continue
-                alias = self.filename_or_caliperreader.attribute(col).get(
-                    "attribute.alias"
-                )
-                if alias:
-                    # update column name in metrics dataframe
-                    df_metrics.rename(columns={col: alias}, inplace=True)
-
-                    # also update list of metric columns
-                    self.metric_cols = [
-                        alias if item == col else item for item in self.metric_cols
-                    ]
-
-        # dict mapping old to new column names to make columns consistent with
-        # other readers
-        old_to_new = {
-            "mpi.rank": "rank",
-            "module#cali.sampler.pc": "module",
-            "sum#time.duration": "time",
-            "sum#avg#sum#time.duration": "time",
-            "inclusive#sum#time.duration": "time (inc)",
-            "sum#avg#inclusive#sum#time.duration": "time (inc)",
-        }
-
-        # change column names
-        new_cols = []
-        for col in df_metrics.columns:
-            if col in old_to_new:
-                new_cols.append(old_to_new[col])
-            else:
-                new_cols.append(col)
-        df_metrics.columns = new_cols
-
-        # create list of exclusive and inclusive metric columns
-        exc_metrics = []
-        inc_metrics = []
-        for column in self.metric_cols:
-            # ignore rank as an exc or inc metric
-            if column == "mpi.rank":
-                continue
-
-            # add new column names to list of metrics if inc or inclusive in
-            # old column names
-            if "(inc)" in column or "inclusive" in column:
-                if column in old_to_new:
-                    column = old_to_new[column]
-                inc_metrics.append(column)
-            else:
-                if column in old_to_new:
-                    column = old_to_new[column]
-                exc_metrics.append(column)
-
-        with self.timer.phase("data frame"):
-            # merge the metrics and node dataframes on the nid column
-            dataframe = pd.merge(df_metrics, self.df_nodes, on="nid")
-            dataframe["nid"] = dataframe["nid"].astype(pd.Int64Dtype())
-
-            # set the index to be a MultiIndex
-            indices = ["node"]
-            if "rank" in dataframe.columns:
-                indices.append("rank")
-            dataframe.set_index(indices, inplace=True)
-            dataframe.sort_index(inplace=True)
-
-        # set the default metric
-        if self.default_metric is None:
-            if "time (inc)" in dataframe.columns:
-                self.default_metric = "time"
-            elif "avg#inclusive#sum#time.duration" in dataframe.columns:
-                self.default_metric = "avg#inclusive#sum#time.duration"
-            elif len(inc_metrics) > 0:
-                self.default_metric = inc_metrics[0]
-            elif len(exc_metrics) > 0:
-                self.default_metric = exc_metrics[0]
-
+        
+        # TODO: move metadata parsing here so we only have to do it once and reuse in the graphframe - should work
         metadata = self.filename_or_caliperreader.globals
         parsed_metadata = self._parse_metadata(metadata)
 
+        # TODO: change design - have read_metrics store a list of dicts IF timeseries
+	# Then here it can iterate through each thing in the metric list
+ 
+        with self.timer.phase("read metrics"):
+            metrics_list = self.read_metrics()
+	
+        for df_fixed_data in metrics_list:
+	    metrics = pd.DataFrame.from_dict(data=df_fixed_data)
+
+            # add missing intermediate nodes to the df_fixed_data dataframe
+            if "mpi.rank" in df_fixed_data.columns:
+            	num_ranks = metrics["mpi.rank"].max() + 1
+            	rank_list = range(0, num_ranks)
+
+            # create a standard dict to be used for filling all missing rows
+            default_metric_dict = {}
+            for idx, col in enumerate(self.record_data_cols):
+                if self.filename_or_caliperreader.attribute(col).is_value():
+                    default_metric_dict[list(self.record_data_cols)[idx]] = 0
+                else:
+                    default_metric_dict[list(self.record_data_cols)[idx]] = None
+            default_metric_dict["nid"] = np.nan
+
+            # create a list of dicts, one dict for each missing row
+            missing_nodes = []
+            for iteridx, row in self.df_nodes.iterrows():
+                # check if df_nodes row exists in df_fixed_data
+                metric_rows = df_fixed_data.loc[metrics["nid"] == row["nid"]]
+                if "mpi.rank" not in self.metric_cols:
+                    if metric_rows.empty:
+                        # add a single row
+                        node_dict = dict(default_metric_dict)
+                        missing_nodes.append(node_dict)
+                else:
+                    if metric_rows.empty:
+                        # add a row per MPI rank
+                        for rank in rank_list:
+                            node_dict = dict(default_metric_dict)
+                            node_dict["nid"] = row["nid"]
+                            node_dict["mpi.rank"] = rank
+                            missing_nodes.append(node_dict)
+                    elif len(metric_rows) < num_ranks:
+                        # add a row for each missing MPI rank
+                        present_ranks = metric_rows["mpi.rank"].values
+                        missing_ranks = [x for x in rank_list if x not in present_ranks]
+                        for rank in missing_ranks:
+                            node_dict = dict(default_metric_dict)
+                            node_dict["nid"] = row["nid"]
+                            node_dict["mpi.rank"] = rank
+                            missing_nodes.append(node_dict)
+
+            df_missing = pd.DataFrame.from_dict(data=missing_nodes)
+            df_metrics = pd.concat([df_fixed_data, df_missing], sort=False)
+
+            # rename columns to user-readable metric names (i.e., aliases)
+            if not self.use_native_metric_names:
+                for col in df_metrics.columns:
+                    if col == "nid":
+                        continue
+                    alias = self.filename_or_caliperreader.attribute(col).get(
+                        "attribute.alias"
+                    )
+                    if alias:
+                        # update column name in metrics dataframe
+                        df_metrics.rename(columns={col: alias}, inplace=True)
+
+                        # also update list of metric columns
+                        self.metric_cols = [
+                            alias if item == col else item for item in self.metric_cols
+                        ]  
+
+            # dict mapping old to new column names to make columns consistent with
+            # other readers
+            old_to_new = {
+                "mpi.rank": "rank",
+                "module#cali.sampler.pc": "module",
+                "sum#time.duration": "time",
+                "sum#avg#sum#time.duration": "time",
+                "inclusive#sum#time.duration": "time (inc)",
+                "sum#avg#inclusive#sum#time.duration": "time (inc)",
+            }
+
+            # change column names
+            new_cols = []
+            for col in df_metrics.columns:
+                if col in old_to_new:
+                    new_cols.append(old_to_new[col])
+                else:
+                    new_cols.append(col)
+            df_metrics.columns = new_cols
+
+            # create list of exclusive and inclusive metric columns
+            exc_metrics = []
+            inc_metrics = []
+            for column in self.metric_cols:
+                # ignore rank as an exc or inc metric
+                if column == "mpi.rank":
+                    continue
+
+                # add new column names to list of metrics if inc or inclusive in
+                # old column names
+                if "(inc)" in column or "inclusive" in column:
+                    if column in old_to_new:
+                        column = old_to_new[column]
+                    inc_metrics.append(column)
+                else:
+                    if column in old_to_new:
+                        column = old_to_new[column]
+                    exc_metrics.append(column)
+
+            with self.timer.phase("data frame"):
+                # merge the metrics and node dataframes on the nid column
+                dataframe = pd.merge(df_metrics, self.df_nodes, on="nid")
+                dataframe["nid"] = dataframe["nid"].astype(pd.Int64Dtype())
+
+                # set the index to be a MultiIndex
+                indices = ["node"]
+                if "rank" in dataframe.columns:
+                    indices.append("rank")
+                dataframe.set_index(indices, inplace=True)
+                dataframe.sort_index(inplace=True)
+
+            # set the default metric
+            if self.default_metric is None:
+                if "time (inc)" in dataframe.columns:
+                    self.default_metric = "time"
+                elif "avg#inclusive#sum#time.duration" in dataframe.columns:
+                    self.default_metric = "avg#inclusive#sum#time.duration"
+                elif len(inc_metrics) > 0:
+                    self.default_metric = inc_metrics[0]
+                elif len(exc_metrics) > 0:
+                    self.default_metric = exc_metrics[0]
+	    
+	    # if gf_list is not None then we have a timeseries and can add the gf to the list
+	    if self.gf_list:
+		self.gf_list.append(hatchet.graphframe.GraphFrame(
+      		    graph,
+		    dataframe,
+ 		    exc_metrics,
+		    inc_metrics,
+		    self.default_metric,
+		    metadata=parsed_metadata,
+	    	)
+
+        # If just one profile this will return like always, othewise we'll have populated the timeseries list of gfs and we can ignore this
         return hatchet.graphframe.GraphFrame(
             graph,
             dataframe,
@@ -484,9 +505,11 @@ class CaliperNativeReader:
             metadata=parsed_metadata,
         )
 
-    def read_timeseries(self):
-        gf_list = []
+    def read_timeseries(self, level):
+	"""Intercept the read function so we can get a list of profiles for thicket"""
+	self.gf_list = []
+        self.timeseries_level = level
         # will need to split this up in the read method
-        gf_list.append(self.read())        
-        return gf_list
+        _ = self.read()        
+        return self.gf_list
     
