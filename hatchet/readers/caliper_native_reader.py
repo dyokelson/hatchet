@@ -73,6 +73,15 @@ class CaliperNativeReader:
         if isinstance(self.string_attributes, str):
             self.string_attributes = [self.string_attributes]
 
+    def _create_metric_df(self, metrics):
+        # make list of metric columns
+        for col in self.record_data_cols:
+            if self.filename_or_caliperreader.attribute(col).is_value():
+                self.metric_cols.append(col)
+        df_metrics = pd.DataFrame.from_dict(data=metrics)
+        df_new = df_metrics.groupby(df_metrics["nid"]).aggregate("first").reset_index()
+        return df_new
+
     def read_metrics(self, ctx="path"):
 
         """ append each metrics table to a list and return the list, split on timeseries_level if exists """
@@ -84,17 +93,15 @@ class CaliperNativeReader:
 
         # read metadata from the caliper reader
         for record in records:
+            # if we have a timeseries file we need to split the single cali file into multiple profiles
             if self.timeseries_level in record:
-                # check if it's the next timestep
+                # check if we've hit the next timestep
                 next_timestep = int(record[self.timeseries_level])
                 if cur_timestep != next_timestep:
-                    # make list of metric columns
-                    for col in self.record_data_cols:
-                        if self.filename_or_caliperreader.attribute(col).is_value():
-                            self.metric_cols.append(col)
-                    df_metrics = pd.DataFrame.from_dict(data=all_metrics)
-                    df_new = df_metrics.groupby(df_metrics["nid"]).aggregate("first").reset_index()
+                    # make a dataframe for the current profile before we continue reading metrics
+                    df_new = self._create_metric_df(all_metrics)
                     metric_dfs.append(df_new)
+                    # reset the metrics for the next df, and update the timestep
                     all_metrics = all_metrics[:2]
                     cur_timestep = next_timestep
 
@@ -147,15 +154,11 @@ class CaliperNativeReader:
                                             raise e
 
                     all_metrics.append(node_dict)
-        # TODO: better way to handle this? if there is not a timeseries add the single df to the list           
-        for col in self.record_data_cols:
-            if self.filename_or_caliperreader.attribute(col).is_value():
-                self.metric_cols.append(col)
-
-        df_metrics = pd.DataFrame.from_dict(data=all_metrics)
-        df_new = df_metrics.groupby(df_metrics["nid"]).aggregate("first").reset_index()
+         
+        # create the dataframe, if a single profile (or last one if the timeseries)          
+        df_new = self._create_metric_df(all_metrics)
         metric_dfs.append(df_new)
-    
+        # will return a list with only one element unless it is a timeseries
         return metric_dfs
 
     def create_graph(self, ctx="path"):
@@ -374,12 +377,12 @@ class CaliperNativeReader:
         with self.timer.phase("read metrics"):
             metrics_list = self.read_metrics()
             
-        # If no timeseries there will just be one element in the list
+        # If not a timeseries there will just be one element in the list
         for df_fixed_data in metrics_list:
             
             metrics = pd.DataFrame.from_dict(data=df_fixed_data)
 
-                # add missing intermediate nodes to the df_fixed_data dataframe
+            # add missing intermediate nodes to the df_fixed_data dataframe
             if "mpi.rank" in df_fixed_data.columns:
                 num_ranks = metrics["mpi.rank"].max() + 1
                 rank_list = range(0, num_ranks)
@@ -503,6 +506,10 @@ class CaliperNativeReader:
                 elif len(exc_metrics) > 0:
                     self.default_metric = exc_metrics[0]
 
+            # drop the "Node order" column because we don't want to expose it to the user
+            if "Node order" in dataframe.columns:
+                dataframe = dataframe.drop(columns=["Node order"])
+
             # add the gf to the list
             self.gf_list.append(hatchet.graphframe.GraphFrame(
                 graph,
@@ -513,13 +520,23 @@ class CaliperNativeReader:
                 metadata=parsed_metadata,
             ))
 
-        # If just one profile this will return like always, othewise we'll have populated the timeseries list of gfs and we can ignore this
+        # If not a timeseries this will return the single profile expected
+        #  othewise we'll have populated the timeseries list of gfs attribute and can ignore the return value
         return self.gf_list[0]
 
-    def read_timeseries(self, level):
-	    # Intercept the read function so we can get a list of profiles for thicket
-        # self.gf_list = []
+    def read_timeseries(self, level="loop.start_iteration"):
+        """Read in a timeseries Cali file. We need to intercept the read function 
+        so we can get a list of profiles for thicket
+
+        Args:
+            level (str): column name to split the Cali file on, default
+
+        Return:
+            (list[GraphFrame]): A list of graph frames to be loaded into thicket
+        """
         self.timeseries_level = level
+        # we don't need the return gf from read as we want the list that has been populated
         _ = self.read()
+        # return the list of graph frames that has been split per timestep 
         return self.gf_list
     
