@@ -43,7 +43,7 @@ class CaliperNativeReader:
         self.callpath_to_idx = {}
         self.global_nid = 0
         self.node_ordering = False
-	self.gf_list = None # only initialize to an empty list in the read_timeseries intercept function
+        self.gf_list = []
         self.timeseries_level = None
 
         self.default_metric = None
@@ -58,12 +58,29 @@ class CaliperNativeReader:
 
     def read_metrics(self, ctx="path"):
 
-    """ TODO: append each metrics table to a list and return the list, split on timeseries_level if exists """
+        """ append each metrics table to a list and return the list, split on timeseries_level if exists """
+        metric_dfs = []
         all_metrics = []
+        next_timestep = 0
+        cur_timestep = 0
         records = self.filename_or_caliperreader.records
 
         # read metadata from the caliper reader
         for record in records:
+            if self.timeseries_level in record:
+                # check if it's the next timestep
+                next_timestep = int(record[self.timeseries_level])
+                if cur_timestep != next_timestep:
+                    # make list of metric columns
+                    for col in self.record_data_cols:
+                        if self.filename_or_caliperreader.attribute(col).is_value():
+                            self.metric_cols.append(col)
+                    df_metrics = pd.DataFrame.from_dict(data=all_metrics)
+                    df_new = df_metrics.groupby(df_metrics["nid"]).aggregate("first").reset_index()
+                    metric_dfs.append(df_new)
+                    all_metrics = all_metrics[:2]
+                    cur_timestep = next_timestep
+
             node_dict = {}
             if ctx in record:
                 # only parse records that have spot.channel=regionprofile or no
@@ -125,18 +142,18 @@ class CaliperNativeReader:
                                     node_dict[item] = record[item]
                                     if item not in self.record_data_cols:
                                         self.record_data_cols.append(item)
-                            # else:
-                                # TODO: do we want to add any error handling here if we get an unsupported type?
-                    all_metrics.append(node_dict)
 
-        # make list of metric columns
+                    all_metrics.append(node_dict)
+        # TODO: better way to handle this? if there is not a timeseries add the single df to the list           
         for col in self.record_data_cols:
             if self.filename_or_caliperreader.attribute(col).is_value():
                 self.metric_cols.append(col)
 
         df_metrics = pd.DataFrame.from_dict(data=all_metrics)
         df_new = df_metrics.groupby(df_metrics["nid"]).aggregate("first").reset_index()
-        return df_new
+        metric_dfs.append(df_new)
+    
+        return metric_dfs
 
     def create_graph(self, ctx="path"):
         list_roots = []
@@ -346,24 +363,23 @@ class CaliperNativeReader:
         if self.node_ordering:
             graph.node_ordering = True
         graph.enumerate_traverse()
-        
-        # TODO: move metadata parsing here so we only have to do it once and reuse in the graphframe - should work
+
         metadata = self.filename_or_caliperreader.globals
         parsed_metadata = self._parse_metadata(metadata)
-
-        # TODO: change design - have read_metrics store a list of dicts IF timeseries
-	# Then here it can iterate through each thing in the metric list
- 
+    
+        # Get a list of metrics (split by timeseries level if it exists)
         with self.timer.phase("read metrics"):
             metrics_list = self.read_metrics()
-	
+            
+        # If no timeseries there will just be one element in the list
         for df_fixed_data in metrics_list:
-	    metrics = pd.DataFrame.from_dict(data=df_fixed_data)
+            
+            metrics = pd.DataFrame.from_dict(data=df_fixed_data)
 
-            # add missing intermediate nodes to the df_fixed_data dataframe
+                # add missing intermediate nodes to the df_fixed_data dataframe
             if "mpi.rank" in df_fixed_data.columns:
-            	num_ranks = metrics["mpi.rank"].max() + 1
-            	rank_list = range(0, num_ranks)
+                num_ranks = metrics["mpi.rank"].max() + 1
+                rank_list = range(0, num_ranks)
 
             # create a standard dict to be used for filling all missing rows
             default_metric_dict = {}
@@ -483,33 +499,24 @@ class CaliperNativeReader:
                     self.default_metric = inc_metrics[0]
                 elif len(exc_metrics) > 0:
                     self.default_metric = exc_metrics[0]
-	    
-	    # if gf_list is not None then we have a timeseries and can add the gf to the list
-	    if self.gf_list:
-		self.gf_list.append(hatchet.graphframe.GraphFrame(
-      		    graph,
-		    dataframe,
- 		    exc_metrics,
-		    inc_metrics,
-		    self.default_metric,
-		    metadata=parsed_metadata,
-	    	)
+
+            # add the gf to the list
+            self.gf_list.append(hatchet.graphframe.GraphFrame(
+                graph,
+                dataframe,
+                exc_metrics,
+                inc_metrics,
+                self.default_metric,
+                metadata=parsed_metadata,
+            ))
 
         # If just one profile this will return like always, othewise we'll have populated the timeseries list of gfs and we can ignore this
-        return hatchet.graphframe.GraphFrame(
-            graph,
-            dataframe,
-            exc_metrics,
-            inc_metrics,
-            self.default_metric,
-            metadata=parsed_metadata,
-        )
+        return self.gf_list[0]
 
     def read_timeseries(self, level):
-	"""Intercept the read function so we can get a list of profiles for thicket"""
-	self.gf_list = []
+	    # Intercept the read function so we can get a list of profiles for thicket
+        # self.gf_list = []
         self.timeseries_level = level
-        # will need to split this up in the read method
-        _ = self.read()        
+        _ = self.read()
         return self.gf_list
     

@@ -819,7 +819,11 @@ def test_graphframe_timeseries_lulesh_from_file(caliper_timeseries_cali):
     assert type(gf.metadata["cali.channel"]) == str
     assert type(gf.metadata["cali.caliper.version"]) == str
 
-    # check for the expected timeseries columns
-    timeseries_cols = ["timeseries.starttime", "timeseries.duration", "loop.start_iteration", "loop.iterations", "memory"]
+    # check for the expected timeseries and memory allocation columns
+    timeseries_cols = ["timeseries.starttime", "timeseries.duration", "loop.start_iteration", "loop.iterations", "alloc.region.highwatermark"]
     for tcol in timeseries_cols:
         assert tcol in gf.dataframe.columns
+
+    # verify some values are as expected
+    assert gf.dataframe["alloc.region.highwatermark"].iloc[0] == 25824351.0
+    assert gf.dataframe["alloc.region.highwatermark"].iloc[1] == 63732320.0

@@ -2,7 +2,6 @@
 # Hatchet Project Developers. See the top-level LICENSE file for details.
 #
 # SPDX-License-Identifier: MIT
-
 import copy
 import sys
 import traceback
@@ -163,7 +162,7 @@ class GraphFrame:
 
         return CaliperNativeReader(
             filename_or_caliperreader, native, string_attributes
-        ).read_timeseries()
+        ).read_timeseries(level=level)
 
     @staticmethod
     def from_spotdb(db_key, list_of_ids=None):
