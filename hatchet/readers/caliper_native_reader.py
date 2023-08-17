@@ -74,13 +74,23 @@ class CaliperNativeReader:
             self.string_attributes = [self.string_attributes]
 
     def _create_metric_df(self, metrics):
-        # make list of metric columns
+        """ Make a list of metric columns and create a dataframe, group by node"""
         for col in self.record_data_cols:
             if self.filename_or_caliperreader.attribute(col).is_value():
                 self.metric_cols.append(col)
         df_metrics = pd.DataFrame.from_dict(data=metrics)
         df_new = df_metrics.groupby(df_metrics["nid"]).aggregate("first").reset_index()
         return df_new
+    
+    def _reset_metrics(self, metrics):
+        """ Since the initial functions (i.e. main) are only called once, this keeps a small subset
+        of the timeseries data and resets the rest so future iterations will be filled with nans"""
+        new_mets = []
+        cols_to_keep = ["nid", "loop.iterations", "loop.start_iteration", "timeseries.snapshot"]
+        for node_dict in metrics:
+            if node_dict.get("timeseries.snapshot") == 0.0:
+                new_mets.append({k: node_dict.get(k, np.nan) for k in cols_to_keep}) 
+        return new_mets
 
     def read_metrics(self, ctx="path"):
 
@@ -102,7 +112,7 @@ class CaliperNativeReader:
                     df_new = self._create_metric_df(all_metrics)
                     metric_dfs.append(df_new)
                     # reset the metrics for the next df, and update the timestep
-                    all_metrics = all_metrics[:2]
+                    all_metrics = self._reset_metrics(all_metrics)
                     cur_timestep = next_timestep
 
             node_dict = {}
@@ -506,9 +516,11 @@ class CaliperNativeReader:
                 elif len(exc_metrics) > 0:
                     self.default_metric = exc_metrics[0]
 
-            # drop the "Node order" column because we don't want to expose it to the user
+            # drop the "Node order" (unaliased "aggregate.slot") column because we don't want to expose it to the user
             if "Node order" in dataframe.columns:
                 dataframe = dataframe.drop(columns=["Node order"])
+            if "aggregate.slot" in dataframe.columns:
+                dataframe = dataframe.drop(columns=["aggregate.slot"])
 
             # add the gf to the list
             self.gf_list.append(hatchet.graphframe.GraphFrame(

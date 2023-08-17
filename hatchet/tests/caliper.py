@@ -266,6 +266,7 @@ def test_graphframe_native_lulesh_from_file_node_order(caliper_ordered_cali):
     assert type(gf.metadata["cali.channel"]) == str
     assert type(gf.metadata["cali.caliper.version"]) == str
     assert "Node order" not in gf.dataframe.columns
+    assert "aggregate.slot" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -333,6 +334,7 @@ def test_graphframe_native_lulesh_from_caliperreader_node_order(caliper_ordered_
     assert "cali.caliper.version" in gf.metadata.keys()
     assert type(gf.metadata["cali.caliper.version"]) == str
     assert "Node order" not in gf.dataframe.columns
+    assert "aggregate.slot" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -396,6 +398,7 @@ def test_graphframe_lulesh_from_json_node_order(caliper_ordered_json):
     assert type(gf.metadata["cali.channel"]) == str
     assert type(gf.metadata["cali.caliper.version"]) == str
     assert "Node order" not in gf.dataframe.columns
+    assert "aggregate.slot" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -460,6 +463,7 @@ def test_graphframe_native_lulesh_from_duplicate_node_order(caliper_ordered_dup)
     assert type(gf.metadata["cali.channel"]) == str
     assert type(gf.metadata["cali.caliper.version"]) == str
     assert "Node order" not in gf.dataframe.columns
+    assert "aggregate.slot" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -523,6 +527,7 @@ def test_graphframe_lulesh_from_duplicate_json_node_order(caliper_ordered_json_d
     assert type(gf.metadata["cali.channel"]) == str
     assert type(gf.metadata["cali.caliper.version"]) == str
     assert "Node order" not in gf.dataframe.columns
+    assert "aggregate.slot" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -587,6 +592,7 @@ def test_graphframe_native_lulesh_from_file_node_order_mpi(caliper_ordered_cali_
     assert type(gf.metadata["cali.channel"]) == str
     assert type(gf.metadata["cali.caliper.version"]) == str
     assert "Node order" not in gf.dataframe.columns
+    assert "aggregate.slot" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -670,6 +676,7 @@ def test_graphframe_native_lulesh_from_caliperreader_node_order_mpi(
     assert "cali.caliper.version" in gf.metadata.keys()
     assert type(gf.metadata["cali.caliper.version"]) == str
     assert "Node order" not in gf.dataframe.columns
+    assert "aggregate.slot" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -803,10 +810,10 @@ def test_graphframe_timeseries_lulesh_from_file(caliper_timeseries_cali):
     
     assert(type(gf_list)) == list
     gf = gf_list[0]
+    gf2 = gf_list[2]
 
     assert len(gf.dataframe.groupby("name")) == 19
     assert "cali.caliper.version" in gf.metadata.keys()
-    print(gf.dataframe.columns)
 
     for col in gf.dataframe.columns:
         if col in ("time (inc)", "time"):
@@ -827,3 +834,5 @@ def test_graphframe_timeseries_lulesh_from_file(caliper_timeseries_cali):
     # verify some values are as expected
     assert gf.dataframe["alloc.region.highwatermark"].iloc[0] == 25824351.0
     assert gf.dataframe["alloc.region.highwatermark"].iloc[1] == 63732320.0
+    assert np.isnan(gf2.dataframe["loop.start_iteration"].iloc[0])
+    assert np.isnan(gf2.dataframe["alloc.region.highwatermark"].iloc[0])
