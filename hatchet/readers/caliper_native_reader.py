@@ -520,12 +520,6 @@ class CaliperNativeReader:
                 elif len(exc_metrics) > 0:
                     self.default_metric = exc_metrics[0]
 
-            # drop the "Node order" (unaliased "aggregate.slot") column because we don't want to expose it to the user
-            if "Node order" in dataframe.columns:
-                dataframe = dataframe.drop(columns=["Node order"])
-            if "aggregate.slot" in dataframe.columns:
-                dataframe = dataframe.drop(columns=["aggregate.slot"])
-
             # add the gf to the list
             self.gf_list.append(hatchet.graphframe.GraphFrame(
                 graph,
