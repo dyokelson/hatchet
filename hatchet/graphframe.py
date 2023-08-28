@@ -779,8 +779,10 @@ class GraphFrame:
                     function(self.dataframe.loc[(subgraph_nodes), columns])
                 )
 
-    def generate_exclusive_columns(self):
+    def generate_exclusive_columns(self, inc_metrics=None):
         """Generates exclusive metrics from available inclusive metrics.
+        Arguments:
+            inc_metrics (str, list, optional): Instead of generating the exclusive time for each inclusive metric, it is possible to specify those metrics manually. Defaults to None.
 
         Currently, this function determines which metrics to generate by looking for one of two things:
 
@@ -798,6 +800,9 @@ class GraphFrame:
         # Iterate over inclusive metrics and collect tuples of (new exclusive metrics name, inclusive metric name)
         generation_pairs = []
         for inc in self.inc_metrics:
+            if inc_metrics and inc not in inc_metrics:
+                continue
+
             # If the metric isn't numeric, it is really categorical. This means the inclusive/exclusive thing doesn't really apply.
             if not pd.api.types.is_numeric_dtype(self.dataframe[inc]):
                 continue
@@ -838,7 +843,7 @@ class GraphFrame:
                         for child in node.children:
                             # TODO: See note about full_idx above
                             child_idx = tuple([child]) + tuple(non_node_idx)
-                            inc_sum += self.dataframe.loc[child_idx, inc]
+                            inc_sum += np.nan_to_num(self.dataframe.loc[child_idx, inc])
                         # Subtract the current node's inclusive metric from the previously calculated sum to
                         # get the exclusive metric value for the node
                         new_data[full_idx] = self.dataframe.loc[full_idx, inc] - inc_sum
@@ -854,7 +859,7 @@ class GraphFrame:
                     # Sum up the inclusive metric values of the current node's children
                     inc_sum = 0
                     for child in node.children:
-                        inc_sum += self.dataframe.loc[child, inc]
+                        inc_sum += np.nan_to_num(self.dataframe.loc[child, inc])
                     # Subtract the current node's inclusive metric from the previously calculated sum to
                     # get the exclusive metric value for the node
                     new_data[node] = self.dataframe.loc[node, inc] - inc_sum
@@ -948,6 +953,7 @@ class GraphFrame:
     def tree(
         self,
         metric_column=None,
+        annotation_column=None,
         precision=3,
         name_column="name",
         expand_name=False,
@@ -958,9 +964,34 @@ class GraphFrame:
         highlight_name=False,
         colormap="RdYlGn",
         invert_colormap=False,
+        colormap_annotations=None,
         render_header=True,
+        min_value=None,
+        max_value=None,
     ):
-        """Format this graphframe as a tree and return the resulting string."""
+        """Visualize the Hatchet graphframe as a tree
+
+        Arguments:
+            metric_column (str, list, optional): Columns to use the metrics from. Defaults to None.
+            annotation_column (str, optional): Column to use as an annotation. Defaults to None.
+            precision (int, optional): Precision of shown numbers. Defaults to 3.
+            name_column (str, optional): Column of the node name. Defaults to "name".
+            expand_name (bool, optional): Limits the lenght of the node name. Defaults to False.
+            context_column (str, optional): Shows the file this function was called in (Available with HPCToolkit). Defaults to "file".
+            rank (int, optional): Specifies the rank to take the data from. Defaults to 0.
+            thread (int, optional): Specifies the thread to take the data from. Defaults to 0.
+            depth (int, optional): Sets the maximum depth of the tree. Defaults to 10000.
+            highlight_name (bool, optional): Highlights the names of the nodes. Defaults to False.
+            colormap (str, optional): Specifies a colormap to use. Defaults to "RdYlGn".
+            invert_colormap (bool, optional): Reverts the chosen colormap. Defaults to False.
+            colormap_annotations (str, list, dict, optional): Either provide the name of a colormap, a list of colors to use or a dictionary which maps the used annotations to a color. Defaults to None.
+            render_header (bool, optional): Shows the Preamble. Defaults to True.
+            min_value (int, optional): Overwrites the min value for the coloring legend. Defaults to None.
+            max_value (int, optional): Overwrites the max value for the coloring legend. Defaults to None.
+
+        Returns:
+            str: String representation of the tree, ready to print
+        """
         color = sys.stdout.isatty()
         shell = None
         if metric_column is None:
@@ -986,6 +1017,7 @@ class GraphFrame:
             self.graph.roots,
             self.dataframe,
             metric_column=metric_column,
+            annotation_column=annotation_column,
             precision=precision,
             name_column=name_column,
             expand_name=expand_name,
@@ -996,7 +1028,10 @@ class GraphFrame:
             highlight_name=highlight_name,
             colormap=colormap,
             invert_colormap=invert_colormap,
+            colormap_annotations=colormap_annotations,
             render_header=render_header,
+            min_value=min_value,
+            max_value=max_value,
         )
 
     def to_dot(self, metric=None, name="name", rank=0, thread=0, threshold=0.0):
