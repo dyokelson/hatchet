@@ -232,12 +232,23 @@ class ConsoleRenderer:
                 df_index = node
 
             node_metric = dataframe.loc[df_index, self.primary_metric]
+            
+            #if "pattern" in dataframe:
+            symbols = {"none": "", "constant": "\U00002192" , "phased": "\U000021B3", "dynamic": "\U0000219D", "sporadic": "\U000021AF" }
+            #mem_metric = "sporadic"
+            mem_metric = "dynamic"
+            #mem_metric = "phased"
 
+            #mem_metric = dataframe.loc[df_index, "memstat.data_pattern"]
+            add_symbol_str = "{}".format(symbols[mem_metric])
+        
             metric_precision = "{:." + str(self.precision) + "f}"
             metric_str = (
+                #add_symbol_str +    
                 self._ansi_color_for_metric(node_metric)
                 + metric_precision.format(node_metric)
                 + self.colors.end
+                + add_symbol_str
             )
 
             if self.second_metric is not None:
