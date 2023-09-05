@@ -215,6 +215,35 @@ class ConsoleRenderer:
         legend += self.colors.right + self.lr_arrows["▶"] + self.colors.end
         legend += " Only in right graph\n"
 
+        if self.annotation_column is not None:
+            if "_pattern" in self.annotation_column:
+                score_ranges = [0.0, 0.2, 0.4, 0.6, 1.0]
+                legend_color_mapping = sorted(score_ranges)
+                legend_colormap = ColorMaps().get_colors(
+                            self.colormap_annotations, False
+                        )
+                legend += "\nTemporal Pattern" 
+                for k in self.temporal_symbols.keys():
+                    if "none" not in k:
+                        legend += "   " + self.temporal_symbols[k] + " " + k
+                legend += "\nTemporal Score  " 
+                for i in range(len(score_ranges)-1):
+                    first_color = legend_colormap[
+                                legend_color_mapping.index(score_ranges[i])
+                                % len(legend_colormap)
+                            ]
+                    second_color = legend_colormap[
+                                legend_color_mapping.index(score_ranges[i+1])
+                                % len(legend_colormap)
+                            ]
+                    legend += " {}".format(first_color)
+                    legend += "  {}".format(score_ranges[i])
+                    legend += " {}".format(self.colors_annotations.end)
+                    legend += "- "
+                    legend += "{}".format(second_color)
+                    legend += "{}".format(score_ranges[i+1])
+                    legend += "{}".format(self.colors_annotations.end)
+                    
         return legend
 
     def render_frame(self, node, dataframe, indent=u"", child_indent=u""):
@@ -232,23 +261,12 @@ class ConsoleRenderer:
                 df_index = node
 
             node_metric = dataframe.loc[df_index, self.primary_metric]
-            
-            #if "pattern" in dataframe:
-            symbols = {"none": "", "constant": "\U00002192" , "phased": "\U000021B3", "dynamic": "\U0000219D", "sporadic": "\U000021AF" }
-            #mem_metric = "sporadic"
-            mem_metric = "dynamic"
-            #mem_metric = "phased"
-
-            #mem_metric = dataframe.loc[df_index, "memstat.data_pattern"]
-            add_symbol_str = "{}".format(symbols[mem_metric])
         
             metric_precision = "{:." + str(self.precision) + "f}"
-            metric_str = (
-                #add_symbol_str +    
+            metric_str = (  
                 self._ansi_color_for_metric(node_metric)
                 + metric_precision.format(node_metric)
                 + self.colors.end
-                + add_symbol_str
             )
 
             if self.second_metric is not None:
@@ -263,20 +281,50 @@ class ConsoleRenderer:
                     dataframe.loc[df_index, self.annotation_column]
                 )
                 if self.colormap_annotations:
-                    if isinstance(self.colormap_annotations, dict):
-                        color_annotation = self.colors_annotations_mapping[
-                            annotation_content
-                        ]
+                    if "_pattern" in self.annotation_column:
+                        self.temporal_symbols = {"none": "", "constant": "\U00002192" , "phased": "\U00002933", "dynamic": "\U000021DD", "sporadic": "\U0000219D" }
+                        #self.temporal_symbols = {"none": "", "constant": "\U00002192" , "phased": "\U00002B0F", "dynamic": "\U0000219D", "sporadic": "\U000021AF" }
+                        pattern_metric = dataframe.loc[df_index, self.annotation_column]
+                        annotation_content = self.temporal_symbols[pattern_metric]
+
+                        # rewrite the annotation coloring since it expects a string value
+                        self.colors_annotations_mapping = sorted(
+                        list(dataframe["memstat.vmrss_temporal_score"].apply(float).unique())
+                        )
+                        coloring_content = dataframe.loc[df_index, "memstat.vmrss_temporal_score"]
+                        if not np.isnan(coloring_content):
+                            color_annotation = self.colors_annotations.colormap[
+                                self.colors_annotations_mapping.index(coloring_content)
+                                % len(self.colors_annotations.colormap)
+                            ]
+                            metric_str += " {}".format(color_annotation)
+                            metric_str += "{}".format(annotation_content)
+                            metric_str += "{}".format(self.colors_annotations.end)
+                        else:
+                            metric_str += "{}".format(annotation_content)
                     else:
-                        color_annotation = self.colors_annotations.colormap[
-                            self.colors_annotations_mapping.index(annotation_content)
-                            % len(self.colors_annotations.colormap)
-                        ]
-                    metric_str += " [{}".format(color_annotation)
-                    metric_str += "{}".format(annotation_content)
-                    metric_str += "{}]".format(self.colors_annotations.end)
+                        if isinstance(self.colormap_annotations, dict):
+                            color_annotation = self.colors_annotations_mapping[
+                                annotation_content
+                            ]
+                        else:
+                            color_annotation = self.colors_annotations.colormap[
+                                self.colors_annotations_mapping.index(annotation_content)
+                                % len(self.colors_annotations.colormap)
+                            ]
+                        metric_str += " [{}".format(color_annotation)
+                        metric_str += "{}".format(annotation_content)
+                        metric_str += "{}]".format(self.colors_annotations.end)
                 else:
-                    metric_str += " [{}]".format(annotation_content)
+                    # check if the annotation column is the temporal pattern column and map symbol accordingly
+                    if "_pattern" in self.annotation_column:
+                        self.temporal_symbols = {"none": "", "constant": "\U00002192" , "phased": "\U00002933", "dynamic": "\U0000219D", "sporadic": "\U000021AF" }
+                        #self.temporal_symbols = {"none": "", "constant": "\U00002192" , "phased": "\U00002B0F", "dynamic": "\U0000219D", "sporadic": "\U000021AF" }
+                        mem_metric = dataframe.loc[df_index, self.annotation_column]
+                        annotation_content = self.temporal_symbols[mem_metric]
+                        metric_str += " {}".format(annotation_content)
+                    else:
+                        metric_str += " [{}]".format(annotation_content)
 
             node_name = dataframe.loc[df_index, self.name]
             if self.expand is False:
