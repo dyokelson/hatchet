@@ -105,7 +105,13 @@ class CaliperNativeReader:
         for record in records:
             # if we have a timeseries file we need to split the single cali file into multiple profiles
             if self.timeseries_level in record:
+                #spot_profile = lambda : True if "spot.channel" in self.timeseries_level else False
                 # check if we've hit the next timestep
+                #if spot_profile:
+                # if "spot.channel" in record:# and record["spot.channel"] == "timeseries":
+                #     print(record)
+                    #next_timestep = int(record)
+                #else:
                 next_timestep = int(record[self.timeseries_level])
                 if cur_timestep != next_timestep:
                     # make a dataframe for the current profile before we continue reading metrics
@@ -520,6 +526,12 @@ class CaliperNativeReader:
                 elif len(exc_metrics) > 0:
                     self.default_metric = exc_metrics[0]
 
+            # remove the "Node order" (or unaliased "aggregate.slot") 
+            if "Node order" in dataframe.columns:
+                dataframe = dataframe.drop(columns="Node order")
+            if "aggregate.slot" in dataframe.columns:
+                dataframe = dataframe.drop(columns="aggregate.slot")
+
             # add the gf to the list
             self.gf_list.append(hatchet.graphframe.GraphFrame(
                 graph,
@@ -530,6 +542,9 @@ class CaliperNativeReader:
                 metadata=parsed_metadata,
             ))
 
+        # Now we are done reading the caliper file in, if it's a node order file we don't want to keep this boolean set for future reindexing
+        self.node_ordering = False
+        
         # If not a timeseries this will return the single profile expected
         #  othewise we'll have populated the timeseries list of gfs attribute and can ignore the return value
         return self.gf_list[0]

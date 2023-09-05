@@ -236,6 +236,7 @@ def test_graphframe_native_lulesh_from_file_node_order(caliper_ordered_cali):
     assert "cali.caliper.version" in gf.metadata.keys()
     assert type(gf.metadata["cali.channel"]) == str
     assert type(gf.metadata["cali.caliper.version"]) == str
+    assert "Node order" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -302,6 +303,7 @@ def test_graphframe_native_lulesh_from_caliperreader_node_order(caliper_ordered_
     assert len(gf.dataframe.groupby("name")) == 19
     assert "cali.caliper.version" in gf.metadata.keys()
     assert type(gf.metadata["cali.caliper.version"]) == str
+    assert "Node order" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -364,6 +366,7 @@ def test_graphframe_lulesh_from_json_node_order(caliper_ordered_json):
     assert "cali.caliper.version" in gf.metadata.keys()
     assert type(gf.metadata["cali.channel"]) == str
     assert type(gf.metadata["cali.caliper.version"]) == str
+    assert "Node order" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -427,6 +430,7 @@ def test_graphframe_native_lulesh_from_duplicate_node_order(caliper_ordered_dup)
     assert "cali.caliper.version" in gf.metadata.keys()
     assert type(gf.metadata["cali.channel"]) == str
     assert type(gf.metadata["cali.caliper.version"]) == str
+    assert "Node order" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -489,6 +493,7 @@ def test_graphframe_lulesh_from_duplicate_json_node_order(caliper_ordered_json_d
     assert "cali.caliper.version" in gf.metadata.keys()
     assert type(gf.metadata["cali.channel"]) == str
     assert type(gf.metadata["cali.caliper.version"]) == str
+    assert "Node order" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -552,6 +557,7 @@ def test_graphframe_native_lulesh_from_file_node_order_mpi(caliper_ordered_cali_
     assert "cali.caliper.version" in gf.metadata.keys()
     assert type(gf.metadata["cali.channel"]) == str
     assert type(gf.metadata["cali.caliper.version"]) == str
+    assert "Node order" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -634,6 +640,7 @@ def test_graphframe_native_lulesh_from_caliperreader_node_order_mpi(
     assert len(gf.dataframe.groupby("name")) == 26
     assert "cali.caliper.version" in gf.metadata.keys()
     assert type(gf.metadata["cali.caliper.version"]) == str
+    assert "Node order" not in gf.dataframe.columns
 
     expected_order = [
         "main",
@@ -764,6 +771,41 @@ def test_graphframe_timeseries_lulesh_from_file(caliper_timeseries_cali):
     """Sanity check the timeseries Caliper reader by examining a known input."""
 
     gf_list = GraphFrame.from_timeseries(str(caliper_timeseries_cali))
+    
+    assert(type(gf_list)) == list
+    gf = gf_list[0]
+    gf2 = gf_list[2]
+
+    assert len(gf.dataframe.groupby("name")) == 19
+    assert "cali.caliper.version" in gf.metadata.keys()
+
+    for col in gf.dataframe.columns:
+        if col in ("time (inc)", "time"):
+            assert gf.dataframe[col].dtype == np.float64
+        elif col in ("nid", "rank"):
+            assert gf.dataframe[col].dtype == pd.Int64Dtype()
+        elif col in ("name", "node"):
+            assert gf.dataframe[col].dtype == object
+
+    assert type(gf.metadata["cali.channel"]) == str
+    assert type(gf.metadata["cali.caliper.version"]) == str
+
+    # check for the expected timeseries and memory allocation columns
+    timeseries_cols = ["timeseries.starttime", "timeseries.duration", "loop.start_iteration", "loop.iterations", "alloc.region.highwatermark"]
+    for tcol in timeseries_cols:
+        assert tcol in gf.dataframe.columns
+
+    # verify some values are as expected
+    assert gf.dataframe["alloc.region.highwatermark"].iloc[0] == 25824351.0
+    assert gf.dataframe["alloc.region.highwatermark"].iloc[1] == 63732320.0
+    assert np.isnan(gf2.dataframe["loop.start_iteration"].iloc[0])
+    assert np.isnan(gf2.dataframe["alloc.region.highwatermark"].iloc[0])
+
+
+def test_graphframe_timeseries_spot_from_file(caliper_timeseries_spot_cali):
+    """Sanity check the timeseries Caliper reader by examining a known input."""
+
+    gf_list = GraphFrame.from_timeseries(str(caliper_timeseries_spot_cali),level="spot.channel=timeseries" )
     
     assert(type(gf_list)) == list
     gf = gf_list[0]
