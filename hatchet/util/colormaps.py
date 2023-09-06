@@ -95,6 +95,19 @@ class ColorMaps:
         "\033[38;5;26m",  # Dark Blue
     ]
 
+    # Bivariate color map (3x3 grid, bottom left to top right, across each row)
+    Bivariate = [
+        "#e8e8e8", # Off White
+        "#ace4e4", # Sea Green
+        "#5ac8c8", # Turquoise
+        "#dfb0d6", # Light Pink
+        "#a5add3", # Light Purple
+        "5698b9", # Light Blue
+        "#be64ac", # Magenta
+        "#8c62aa", # Purple
+        "#3b4994", # Blue
+    ]
+
     def __init__(self):
         self.colors = []
 
@@ -123,6 +136,8 @@ class ColorMaps:
             self.colors = self.RdYlBu.copy()
         elif colormap == "Spectral":
             self.colors = self.Spectral.copy()
+        elif colormap == "Bivariate":
+            self.colors = self.Bivariate.copy()
         else:
             raise ValueError(
                 self.colormap

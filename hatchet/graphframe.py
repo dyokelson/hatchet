@@ -965,6 +965,7 @@ class GraphFrame:
         colormap="RdYlGn",
         invert_colormap=False,
         colormap_annotations=None,
+        bivariate=False,
         render_header=True,
         min_value=None,
         max_value=None,
@@ -985,6 +986,7 @@ class GraphFrame:
             colormap (str, optional): Specifies a colormap to use. Defaults to "RdYlGn".
             invert_colormap (bool, optional): Reverts the chosen colormap. Defaults to False.
             colormap_annotations (str, list, dict, optional): Either provide the name of a colormap, a list of colors to use or a dictionary which maps the used annotations to a color. Defaults to None.
+            bivariate (bool, optional): perform bivariate coloring of annotation column and metric column. Defaults to False.
             render_header (bool, optional): Shows the Preamble. Defaults to True.
             min_value (int, optional): Overwrites the min value for the coloring legend. Defaults to None.
             max_value (int, optional): Overwrites the max value for the coloring legend. Defaults to None.

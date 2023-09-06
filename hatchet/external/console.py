@@ -35,6 +35,8 @@ import pandas as pd
 import numpy as np
 import warnings
 from ..util.colormaps import ColorMaps
+import matplotlib.colors as pltcolors
+import matplotlib.pyplot as plt
 
 
 class ConsoleRenderer:
@@ -68,6 +70,7 @@ class ConsoleRenderer:
         self.colormap = kwargs["colormap"]
         self.invert_colormap = kwargs["invert_colormap"]
         self.colormap_annotations = kwargs["colormap_annotations"]
+        #self.bivariate = kwargs["bivariate"]
         self.min_value = kwargs["min_value"]
         self.max_value = kwargs["max_value"]
 
@@ -280,23 +283,45 @@ class ConsoleRenderer:
                 annotation_content = str(
                     dataframe.loc[df_index, self.annotation_column]
                 )
+                # set up for temporal pattern metrics if it is the annotation column
+                # if "_pattern" in self.annotation_column:
+                #     self.pattern_suffix = "_pattern"
+                #     self.score_suffix = "_temporal_score"
+                    # self.temporal_symbols = {"none": "", "constant": "\U00002192" , "phased": "\U00002933", "dynamic": "\U000021DD", "sporadic": "\U0000219D" }
+                    # #self.temporal_symbols = {"none": "", "constant": "\U00002192" , "phased": "\U00002B0F", "dynamic": "\U0000219D", "sporadic": "\U000021AF" }
+                    # pattern_metric = dataframe.loc[df_index, self.annotation_column]
+                    # annotation_content = self.temporal_symbols[pattern_metric]
+
+                # perform bivariate coloring of the two columns
+                # if self.bivariate:
+                #     if self.annotation_column is None or len(self.metric_columns)>1:
+                #         raise ValueError("If performing bivariate coloring, provide one annotation column and one metric column")
+                #     else:
+                #         # break both columns into three classes (equal interval for now)
+                #         metric_len = len(dataframe[self.primary_metric])
+                #         anno_len = len(dataframe[self.annotation_column])
+
                 if self.colormap_annotations:
+                    # check if the annotation column is the temporal pattern column and add symbol without square brackets
                     if "_pattern" in self.annotation_column:
                         self.temporal_symbols = {"none": "", "constant": "\U00002192" , "phased": "\U00002933", "dynamic": "\U000021DD", "sporadic": "\U0000219D" }
                         #self.temporal_symbols = {"none": "", "constant": "\U00002192" , "phased": "\U00002B0F", "dynamic": "\U0000219D", "sporadic": "\U000021AF" }
                         pattern_metric = dataframe.loc[df_index, self.annotation_column]
                         annotation_content = self.temporal_symbols[pattern_metric]
-
                         # rewrite the annotation coloring since it expects a string value
+                        coloring_column = self.annotation_column.rstrip("_pattern") + "_temporal_score"
                         self.colors_annotations_mapping = sorted(
-                        list(dataframe["memstat.vmrss_temporal_score"].apply(float).unique())
+                        list(dataframe[coloring_column].apply(float).unique())
                         )
-                        coloring_content = dataframe.loc[df_index, "memstat.vmrss_temporal_score"]
+                        coloring_content = dataframe.loc[df_index, coloring_column]
                         if not np.isnan(coloring_content):
                             color_annotation = self.colors_annotations.colormap[
                                 self.colors_annotations_mapping.index(coloring_content)
                                 % len(self.colors_annotations.colormap)
                             ]
+                            # cmap = cmap = plt.get_cmap("BuPu")
+                            # color_annotation = pltcolors.rgb2hex(cmap(coloring_content))
+                            # print(color_annotation)
                             metric_str += " {}".format(color_annotation)
                             metric_str += "{}".format(annotation_content)
                             metric_str += "{}".format(self.colors_annotations.end)
@@ -315,13 +340,10 @@ class ConsoleRenderer:
                         metric_str += " [{}".format(color_annotation)
                         metric_str += "{}".format(annotation_content)
                         metric_str += "{}]".format(self.colors_annotations.end)
+                # no coloring passed in
                 else:
-                    # check if the annotation column is the temporal pattern column and map symbol accordingly
+                    # check if the annotation column is the temporal pattern column and add symbol without square brackets
                     if "_pattern" in self.annotation_column:
-                        self.temporal_symbols = {"none": "", "constant": "\U00002192" , "phased": "\U00002933", "dynamic": "\U0000219D", "sporadic": "\U000021AF" }
-                        #self.temporal_symbols = {"none": "", "constant": "\U00002192" , "phased": "\U00002B0F", "dynamic": "\U0000219D", "sporadic": "\U000021AF" }
-                        mem_metric = dataframe.loc[df_index, self.annotation_column]
-                        annotation_content = self.temporal_symbols[mem_metric]
                         metric_str += " {}".format(annotation_content)
                     else:
                         metric_str += " [{}]".format(annotation_content)
